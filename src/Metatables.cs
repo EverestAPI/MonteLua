@@ -23,7 +23,7 @@ namespace NLua
     public class MetaFunctions
     {
         public static readonly LuaNativeFunction GcFunction = CollectObject;
-        public static readonly LuaNativeFunction IndexFunction  = GetMethod;
+        public static readonly LuaNativeFunction IndexFunction  = GetMemberValue;
         public static readonly LuaNativeFunction NewIndexFunction = SetFieldOrProperty;
         public static readonly LuaNativeFunction BaseIndexFunction  = GetBaseMethod;
         public static readonly LuaNativeFunction ClassIndexFunction  = GetClassMethod;
@@ -32,7 +32,6 @@ namespace NLua
         public static readonly LuaNativeFunction CallConstructorFunction  = CallConstructor;
         public static readonly LuaNativeFunction ToStringFunction = ToStringLua;
         public static readonly LuaNativeFunction CallDelegateFunction = CallDelegate;
-        public static readonly LuaNativeFunction CallInvalidFunction  = CallInvalidMethod;
 
         public static readonly LuaNativeFunction AddFunction = AddLua;
         public static readonly LuaNativeFunction SubtractFunction = SubtractLua;
@@ -50,22 +49,30 @@ namespace NLua
         /*
          * __index metafunction for CLR objects. Implemented in Lua.
          */
-        public const string LuaIndexFunction = @"local function a(b,c)local d=getmetatable(b)local e=d.cache[c]if e~=nil then return e else local f,g=get_object_member(b,c)if g then d.cache[c]=f end;return f end end;return a";
-            //@"local function index(obj,name)
-            //    local meta = getmetatable(obj)
-            //    local cached = meta.cache[name]
-            //    if cached ~= nil then
-            //       return cached
-            //    else
-            //       local value,isFunc = get_object_member(obj,name)
-                   
-            //       if isFunc then
-            //        meta.cache[name]=value
-            //       end
-            //       return value
-            //     end
-            //end
-            //return index";
+        public const string LuaIndexFunction = @"
+            local fakenil = {}
+            local function index(obj,name)
+                local meta = getmetatable(obj)
+                local cached = meta.cache[name]
+                if cached ~= nil then
+                    if cached == fakenil then
+                        return nil
+                    end
+                    return cached
+                else
+                    local value, isCached = get_object_member(obj,name)
+
+                    if isCached then
+                        if value == nil then
+                            meta.cache[name] = fakenil
+                        else
+                            meta.cache[name] = value
+                        end
+                    end
+                    return value
+                end
+            end
+            return index";
 
         public MetaFunctions(ObjectTranslator translator)
         {
@@ -316,15 +323,15 @@ namespace NLua
 #if __IOS__ || __TVOS__ || __WATCHOS__
         [MonoPInvokeCallback(typeof(LuaNativeFunction))]
 #endif
-        private static int GetMethod(IntPtr state)
+        private static int GetMemberValue(IntPtr state)
         {
             var luaState = LuaState.FromIntPtr(state);
             var translator = ObjectTranslatorPool.Instance.Find(luaState);
             var instance = translator.MetaFunctionsInstance;
-            return instance.GetMethodInternal(luaState);
+            return instance.GetMemberValue(luaState);
         }
 
-        private int GetMethodInternal(LuaState luaState)
+        private int GetMemberValue(LuaState luaState)
         {
             object obj = _translator.GetRawNetObject(luaState, 1);
 
@@ -345,7 +352,7 @@ namespace NLua
             // ie: xmlelement['item'] <- item is a property of xmlelement
 
             if (!string.IsNullOrEmpty(methodName) && IsMemberPresent(proxyType, methodName))
-                return GetMember(luaState, proxyType, obj, methodName, BindingFlags.Instance);
+                return GetMemberValue(luaState, proxyType, obj, methodName, BindingFlags.Instance);
 
             // Try to access by array if the type is right and index is an int (lua numbers always come across as double)
             if (TryAccessByArray(luaState, objType, obj, index))
@@ -360,21 +367,12 @@ namespace NLua
                 if (string.IsNullOrEmpty(methodName))
                     methodName = index.ToString();
 
-                return PushInvalidMethodCall(luaState, objType, methodName);
+                _translator.Push(luaState, null);
+                _translator.Push(luaState, true);
+                return 2;
             }
 
             luaState.PushBoolean(false);
-            return 2;
-        }
-
-        private int PushInvalidMethodCall(LuaState luaState, Type type, string name)
-        {
-            var invokeDelegate = CallInvalidFunction;
-
-            SetMemberCache(type, name, invokeDelegate);
-
-            _translator.PushFunction(luaState, invokeDelegate);
-            _translator.Push(luaState, false);
             return 2;
         }
 
@@ -651,13 +649,13 @@ namespace NLua
                 return 2;
             }
 
-            GetMember(luaState, new ProxyType(obj.GetType()), obj, "__luaInterface_base_" + methodName, BindingFlags.Instance);
+            GetMemberValue(luaState, new ProxyType(obj.GetType()), obj, "__luaInterface_base_" + methodName, BindingFlags.Instance);
             luaState.SetTop(-2);
 
             if (luaState.Type(-1) == LuaType.Nil)
             {
                 luaState.SetTop(-2);
-                return GetMember(luaState, new ProxyType(obj.GetType()), obj, methodName, BindingFlags.Instance);
+                return GetMemberValue(luaState, new ProxyType(obj.GetType()), obj, methodName, BindingFlags.Instance);
             }
 
             luaState.PushBoolean(false);
@@ -725,7 +723,7 @@ namespace NLua
          * Uses reflection to find members, and stores the reflected MemberInfo object in
          * a cache (indexed by the type of the object and the name of the member).
          */
-        int GetMember(LuaState luaState, ProxyType objType, object obj, string methodName, BindingFlags bindingType)
+        int GetMemberValue(LuaState luaState, ProxyType objType, object obj, string methodName, BindingFlags bindingType)
         {
             bool implicitStatic = false;
             MemberInfo member = null;
@@ -794,7 +792,7 @@ namespace NLua
                         // If we can't find the getter in our class, recurse up to the base class and see
                         // if they can help.
                         if (objType.UnderlyingSystemType != typeof(object))
-                            return GetMember(luaState, new ProxyType(objType.UnderlyingSystemType.BaseType), obj, methodName, bindingType);
+                            return GetMemberValue(luaState, new ProxyType(objType.UnderlyingSystemType.BaseType), obj, methodName, bindingType);
                         luaState.PushNil();
                     }
                     catch (TargetInvocationException e)
@@ -851,7 +849,7 @@ namespace NLua
             else
             {
                 if (objType.UnderlyingSystemType != typeof(object))
-                    return GetMember(luaState, new ProxyType(objType.UnderlyingSystemType.BaseType), obj, methodName, bindingType);
+                    return GetMemberValue(luaState, new ProxyType(objType.UnderlyingSystemType.BaseType), obj, methodName, bindingType);
 
                 // We want to throw an exception because merely returning 'nil' in this case
                 // is not sufficient.  valid data members may return nil and therefore there must be some
@@ -1146,7 +1144,7 @@ namespace NLua
                 luaState.PushNil();
                 return 1;
             }
-            return GetMember(luaState, klass, null, methodName, BindingFlags.Static);
+            return GetMemberValue(luaState, klass, null, methodName, BindingFlags.Static);
         }
 
         /*
@@ -1188,21 +1186,6 @@ namespace NLua
             var translator = ObjectTranslatorPool.Instance.Find(luaState);
             var instance = translator.MetaFunctionsInstance;
             return instance.CallDelegateInternal(luaState);
-        }
-
-/*
- * LuaNativeFunction called when the method wasn't found
- */
-#if __IOS__ || __TVOS__ || __WATCHOS__
-        [MonoPInvokeCallback(typeof(LuaNativeFunction))]
-#endif
-        static int CallInvalidMethod(IntPtr state)
-        {
-            var luaState = LuaState.FromIntPtr(state);
-            var translator = ObjectTranslatorPool.Instance.Find(luaState);
-            translator.ThrowError(luaState, "Trying to invoke invalid method or an access an invalid index");
-            luaState.PushNil();
-            return 1;
         }
 
         int CallDelegateInternal(LuaState luaState)
