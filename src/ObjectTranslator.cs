@@ -822,25 +822,23 @@ namespace NLua
             switch (type)
             {
                 case LuaType.Number:
-                    {
-                        if (luaState.IsInteger(index))
-                            return luaState.ToInteger(index);
+                    if (luaState.IsInteger(index))
+                        return luaState.ToInteger(index);
 
-                        return luaState.ToNumber(index);
-                    }
+                    return luaState.ToNumber(index);
                 case LuaType.String:
-                        return luaState.ToString(index, false);
+                    return luaState.ToString(index, false);
                 case LuaType.Boolean:
-                        return luaState.ToBoolean(index);
+                    return luaState.ToBoolean(index);
                 case LuaType.Table:
-                        return GetTable(luaState, index);
+                    return GetTable(luaState, index);
                 case LuaType.Function:
-                        return GetFunction(luaState, index);
+                    return GetFunction(luaState, index);
+                case LuaType.Thread:
+                    return GetThread(luaState, index);
                 case LuaType.UserData:
-                    {
-                        int udata = luaState.ToNetObject(index, Tag);
-                        return udata != -1 ? _objects[udata] : GetUserData(luaState, index);
-                    }
+                    int udata = luaState.ToNetObject(index, Tag);
+                    return udata != -1 ? _objects[udata] : GetUserData(luaState, index);
                 default:
                     return null;
             }
@@ -889,6 +887,21 @@ namespace NLua
             if (reference == -1)
                 return null;
             return new LuaFunction(reference, interpreter);
+        }
+
+        /*
+         * Gets the thread in the index position of the Lua stack.
+         */
+        internal LuaThread GetThread(LuaState luaState, int index)
+        {
+            // Before create new tables, check if there is any finalized object to clean.
+            CleanFinalizedReferences(luaState);
+
+            luaState.PushCopy(index);
+            int reference = luaState.Ref(LuaRegistry.Index);
+            if (reference == -1)
+                return null;
+            return new LuaThread(reference, interpreter);
         }
 
         /*
@@ -1017,6 +1030,8 @@ namespace NLua
                 PushFunction(luaState, nativeFunction);
             else if (o is LuaFunction luaFunction)
                 luaFunction.Push(luaState);
+            else if (o is LuaThread luaThread)
+                luaThread.Push(luaState);
             else
                 PushObject(luaState, o, "luaNet_metatable");
         }
