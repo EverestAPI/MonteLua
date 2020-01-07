@@ -44,11 +44,6 @@ namespace NLua
          * Checks if the value at Lua stack index stackPos matches paramType, 
          * returning a conversion function if it does and null otherwise.
          */
-        internal ExtractValue GetExtractor(ProxyType paramType)
-        {
-            return GetExtractor(paramType.UnderlyingSystemType);
-        }
-
         internal ExtractValue GetExtractor(Type paramType)
         {
             if (paramType.IsByRef)
@@ -64,7 +59,7 @@ namespace NLua
             if (paramType.IsByRef)
                 paramType = paramType.GetElementType();
 
-            var underlyingType = Nullable.GetUnderlyingType(paramType);
+            Type underlyingType = Nullable.GetUnderlyingType(paramType);
 
             if (underlyingType != null)
             {
@@ -169,7 +164,7 @@ namespace NLua
             {
                 if (luaState.GetMetaField(stackPos, "__index") != LuaType.Nil)
                 {
-                    object obj = _translator.GetNetObject(luaState, -1);
+                    object obj = _translator.GetNetObject(-1);
                     luaState.SetTop(-2);
                     if (obj != null && paramType.IsInstanceOfType(obj))
                         return _extractNetObject;
@@ -179,7 +174,7 @@ namespace NLua
             }
             else
             {
-                object obj = _translator.GetNetObject(luaState, stackPos);
+                object obj = _translator.GetNetObject(stackPos);
                 if (obj != null && paramType.IsInstanceOfType(obj))
                     return _extractNetObject;
             }
@@ -356,22 +351,22 @@ namespace NLua
 
         private object GetAsTable(LuaState luaState, int stackPos)
         {
-            return _translator.GetTable(luaState, stackPos);
+            return _translator.GetTable(stackPos);
         }
 
         private object GetAsFunction(LuaState luaState, int stackPos)
         {
-            return _translator.GetFunction(luaState, stackPos);
+            return _translator.GetFunction(stackPos);
         }
 
         private object GetAsUserdata(LuaState luaState, int stackPos)
         {
-            return _translator.GetUserData(luaState, stackPos);
+            return _translator.GetUserData(stackPos);
         }
 
         private object GetAsThread(LuaState luaState, int stackPos)
         {
-            return _translator.GetThread(luaState, stackPos);
+            return _translator.GetThread(stackPos);
         }
 
         public object GetAsObject(LuaState luaState, int stackPos)
@@ -390,13 +385,13 @@ namespace NLua
                 }
             }
 
-            object obj = _translator.GetObject(luaState, stackPos);
+            object obj = _translator.GetObject(stackPos);
             return obj;
         }
 
         public object GetAsNetObject(LuaState luaState, int stackPos)
         {
-            object obj = _translator.GetNetObject(luaState, stackPos);
+            object obj = _translator.GetNetObject(stackPos);
 
             if (obj != null || luaState.Type(stackPos) != LuaType.Table)
                 return obj;
@@ -408,7 +403,7 @@ namespace NLua
             {
                 luaState.Insert(stackPos);
                 luaState.Remove(stackPos + 1);
-                obj = _translator.GetNetObject(luaState, stackPos);
+                obj = _translator.GetNetObject(stackPos);
             }
             else
                 luaState.SetTop(-2);

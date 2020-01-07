@@ -1,86 +1,53 @@
-﻿using System;
+﻿using NLua.Extensions;
+using System;
 
-namespace NLua
-{
+namespace NLua {
     /// <summary>
     /// Base class to provide consistent disposal flow across lua objects. Uses code provided by Yves Duhoux and suggestions by Hans Schmeidenbacher and Qingrui Li 
     /// </summary>
-    public abstract class LuaBase : IDisposable
-    {
-        private bool _disposed;
-        protected readonly int _Reference;
-        Lua _lua;
+    public abstract class LuaBase : IDisposable {
+        private bool _Disposed;
+        public readonly int Reference;
+        public readonly Lua Lua;
 
-        protected bool TryGet(out Lua lua)
-        {
-            if (_lua.State == null)
-            {
-                lua = null;
-                return false;
-            }
-
-            lua = _lua;
-            return true;
-        }
-        protected LuaBase(int reference, Lua lua)
-        {
-            _lua = lua;
-            _Reference = reference;
+        protected LuaBase(int reference, Lua lua) {
+            Lua = lua;
+            Reference = reference;
         }
 
-        ~LuaBase()
-        {
+        /// <summary>
+        /// Pushes the current object onto the Lua stack
+        /// </summary>
+        protected virtual void Push()
+            => Lua.State.GetRef(Reference);
+        internal void _Push() => Push();
+
+        ~LuaBase() {
             Dispose(false);
         }
 
-        public void Dispose()
-        {
+        public void Dispose() {
             Dispose(true);
             GC.SuppressFinalize(this);
         }
 
-        void DisposeLuaReference(bool finalized)
-        {
-            if (_lua == null)
+        public virtual void Dispose(bool disposeManagedResources) {
+            if (_Disposed)
                 return;
-            Lua lua;
-            if (!TryGet(out lua))
-                return;
-
-            lua.DisposeInternal(_Reference, finalized);
+            _Disposed = true;
+            if (Reference != 0)
+                Lua.DisposeInternal(Reference, !disposeManagedResources);
         }
-        public virtual void Dispose(bool disposeManagedResources)
-        {
-            if (_disposed)
-                return;
 
-            bool finalized = !disposeManagedResources;
-
-            if (_Reference != 0)
-            {
-                DisposeLuaReference(finalized);
-            }
-
-            _lua = null;
-            _disposed = true;
+        public override string ToString() {
+            string name = GetType().Name;
+            return name.Substring(3, 1).ToLowerInvariant() + name.Substring(4);
         }
 
         public override bool Equals(object o)
-        {
-            var reference = o as LuaBase;
-            if (reference == null)
-                return false;
-
-            Lua lua;
-            if (!TryGet(out lua))
-                return false;
-
-            return lua.CompareRef(reference._Reference, _Reference);
-        }
+            => (o is LuaBase other) && Lua.CompareRef(other.Reference, Reference);
 
         public override int GetHashCode()
-        {
-            return _Reference;
-        }
+            => Reference;
     }
 }

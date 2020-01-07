@@ -1,13 +1,20 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net45;netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>net45</TargetFrameworks>
     <AssemblyName>NLua</AssemblyName>
     <RootNamespace>NLua</RootNamespace>
     <PublicSign Condition=" '$(OS)' != 'Windows_NT' ">true</PublicSign>
     <SignAssembly>true</SignAssembly>
     <AssemblyOriginatorKeyFile>$(MSBuildThisFileDirectory)\NLua.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="src\init.lua" />
+    <None Remove="src\metaindex.lua" />
+    <EmbeddedResource Include="src\metaindex.lua" />
+    <EmbeddedResource Include="src\init.lua" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="KeraLua" Version="1.0.22" />

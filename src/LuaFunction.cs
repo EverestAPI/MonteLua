@@ -3,89 +3,50 @@ using KeraLua;
 
 using LuaState = KeraLua.Lua;
 using LuaNativeFunction = KeraLua.LuaFunction;
+using NLua.Extensions;
 
-namespace NLua
-{
-    public class LuaFunction : LuaBase
-    {
-        internal readonly LuaNativeFunction function;
+namespace NLua {
+    public class LuaFunction : LuaBase {
+        internal readonly LuaNativeFunction _Function;
 
-        public LuaFunction(int reference, Lua interpreter):base(reference, interpreter)
-        {
-            function = null;
+        public LuaFunction(int reference, Lua lua)
+            : base(reference, lua) {
         }
 
-        public LuaFunction(LuaNativeFunction nativeFunction, Lua interpreter):base (0, interpreter)
-        {
-            function = nativeFunction;
+        public LuaFunction(LuaNativeFunction function, Lua lua)
+            : base(0, lua) {
+            _Function = function;
         }
 
-        /*
-         * Calls the function casting return values to the types
-         * in returnTypes
-         */
+        /// <summary>
+        /// Calls the function casting return values to the types in returnTypes
+        /// </summary>
         internal object[] Call(object[] args, Type[] returnTypes)
-        {
-            Lua lua;
-            if (!TryGet(out lua))
-                return null;
+            => Lua.CallFunction(this, args, returnTypes);
 
-            return lua.CallFunction(this, args, returnTypes);
-        }
-
-        /*
-         * Calls the function and returns its return values inside
-         * an array
-         */
+        /// <summary>
+        /// Calls the function and returns its return values inside an array
+        /// </summary>
         public object[] Call(params object[] args)
-        {
-            Lua lua;
-            if (!TryGet(out lua))
-                return null;
+            => Lua.CallFunction(this, args);
 
-            return lua.CallFunction(this, args);
-        }
-
-        /*
-         * Pushes the function into the Lua stack
-         */
-        internal void Push(LuaState luaState)
-        {
-            Lua lua;
-            if (!TryGet(out lua))
-                return;
-
-            if (_Reference != 0)
-                luaState.RawGetInteger(LuaRegistry.Index, _Reference);
+        protected override void Push() {
+            if (Reference != 0)
+                Lua.State.GetRef(Reference);
             else
-                lua.PushCSFunction(function);
+                Lua.Translator.Push(_Function);
         }
 
-        public override string ToString()
-        {
-            return "function";
-        }
-
-        public override bool Equals(object o)
-        {
-            var l = o as LuaFunction;
-
-            if (l == null)
+        public override bool Equals(object o) {
+            if (!(o is LuaFunction l))
                 return false;
-
-            Lua lua;
-            if (!TryGet(out lua))
-                return false;
-
-            if (_Reference != 0 && l._Reference != 0)
-                return lua.CompareRef(l._Reference, _Reference);
-
-            return function == l.function;
+            if (Reference != 0 && l.Reference != 0)
+                return Lua.CompareRef(l.Reference, Reference);
+            return _Function == l._Function;
         }
 
-        public override int GetHashCode()
-        {
-            return _Reference != 0 ? _Reference : function.GetHashCode();
+        public override int GetHashCode() {
+            return Reference != 0 ? Reference : _Function.GetHashCode();
         }
     }
 }

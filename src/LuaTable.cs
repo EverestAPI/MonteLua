@@ -1,120 +1,47 @@
 ﻿
 using System;
 using System.Collections;
-
+using System.Collections.Generic;
 using NLua.Extensions;
 
 using LuaState = KeraLua.Lua;
 
-namespace NLua
-{
-    public class LuaTable : LuaBase
-    {
-        public LuaTable(int reference, Lua interpreter): base(reference, interpreter)
-        {
+namespace NLua {
+    public class LuaTable : LuaBase {
+        public LuaTable(int reference, Lua lua)
+            : base(reference, lua) {
         }
 
-        /*
-         * Indexer for string fields of the table
-         */
         public object this[string field] {
-            get
-            {
-                Lua lua;
-                if (!TryGet(out lua))
-                    return null;
-                return lua.GetObject(_Reference, field);
-            }
-            set
-            {
-                Lua lua;
-                if (!TryGet(out lua))
-                    return;
-                lua.SetObject(_Reference, field, value);
-            }
+            get => Lua.GetObjectField(Reference, field);
+            set => Lua.SetObjectField(Reference, field, value);
         }
 
-        /*
-         * Indexer for numeric fields of the table
-         */
         public object this[object field] {
-            get
-            {
-                Lua lua;
-                if (!TryGet(out lua))
-                    return null;
-
-                return lua.GetObject(_Reference, field);
-            }
-            set
-            {
-                Lua lua;
-                if (!TryGet(out lua))
-                    return;
-
-                lua.SetObject(_Reference, field, value);
-            }
+            get => Lua.GetObjectField(Reference, field);
+            set => Lua.SetObjectField(Reference, field, value);
         }
 
         public IDictionaryEnumerator GetEnumerator()
-        {
-            Lua lua;
-            if (!TryGet(out lua))
-                return null;
+            => ToDictionary().GetEnumerator();
 
-            return lua.GetTableDict(this).GetEnumerator();
-        }
+        public ICollection Keys => ToDictionary().Keys;
+        public ICollection Values => ToDictionary().Values;
 
-        public ICollection Keys
-        {
-            get
-            {
-                Lua lua;
-                if (!TryGet(out lua))
-                    return null;
+        public Dictionary<object, object> ToDictionary() {
+            Dictionary<object, object> dict = new Dictionary<object, object>();
 
-                return lua.GetTableDict(this).Keys;
+            using (SafeLuaContext ctx = new SafeLuaContext(Lua)) {
+                Push();
+                Lua.State.PushNil();
+
+                while (Lua.State.Next(-2)) {
+                    dict[Lua.Translator.GetObject(-2)] = Lua.Translator.GetObject(-1);
+                    Lua.State.SetTop(-2);
+                }
+
+                return dict;
             }
-        }
-
-
-        public ICollection Values
-        {
-            get
-            {
-                Lua lua;
-                if (!TryGet(out lua))
-                    return null;
-
-                return lua.GetTableDict(this).Values;
-            }
-        }
-
-
-        /*
-         * Gets an string fields of a table ignoring its metatable,
-         * if it exists
-         */
-        internal object RawGet(string field)
-        {
-            Lua lua;
-            if (!TryGet(out lua))
-                return null;
-
-            return lua.RawGetObject(_Reference, field);
-        }
-
-        /*
-         * Pushes this table into the Lua stack
-         */
-        internal void Push(LuaState luaState)
-        {
-            luaState.GetRef(_Reference);
-        }
-
-        public override string ToString()
-        {
-            return "table";
         }
     }
 }
